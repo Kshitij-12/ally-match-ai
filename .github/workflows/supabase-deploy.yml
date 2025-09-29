@@ -17,10 +17,8 @@ jobs:
           node-version: 18
 
       - name: Install Supabase CLI
-        run: |
-          curl -sL https://github.com/supabase/cli/releases/latest/download/supabase-cli-linux-amd64 -o supabase
-          chmod +x supabase
-          sudo mv supabase /usr/local/bin/supabase
+        run: | 
+          curl -sL https://github.com/supabase/cli/releases/latest/download/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Login to Supabase
         run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
