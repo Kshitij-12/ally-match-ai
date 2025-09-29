@@ -10,11 +10,16 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_REF }}
+    
     steps:
       # Step 1: Check out the repository code
       - uses: actions/checkout@v3
 
-      # Step 2: Set up Node.js environment (required for Supabase functions)
+      # Step 2: Set up Node.js environment
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
@@ -25,18 +30,10 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
-          
-      # Step 4: Verify the CLI installation 
-      - name: Check Supabase CLI version
-        run: supabase --version
 
-      # Step 5: Link the local project to the remote Supabase project
-      - name: Link Supabase project
-        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} -p ${{ secrets.SUPABASE_DB_PASSWORD }}
-
-      # Step 6 & 7: Deploy the individual Edge Functions
+      # Step 4: Deploy Edge Functions directly (no link needed with env vars)
       - name: Deploy analyze-intake function
-        run: supabase functions deploy analyze-intake
+        run: supabase functions deploy analyze-intake --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
       - name: Deploy generate-matches function
-        run: supabase functions deploy generate-matches
+        run: supabase functions deploy generate-matches --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
