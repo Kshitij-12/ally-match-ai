@@ -20,25 +20,20 @@ jobs:
         with:
           node-version: 18
 
-      # --- FIX: Using the officially documented Supabase setup-cli action ---
-      # This action automatically handles installation and pathing.
+      # Step 3: Install Supabase CLI
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
           
-      # Step 3: Verify the CLI installation 
+      # Step 4: Verify the CLI installation 
       - name: Check Supabase CLI version
         run: supabase --version
 
-      # Step 4: Log in to Supabase using a repository secret
-      - name: Login to Supabase
-        run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        
       # Step 5: Link the local project to the remote Supabase project
-      # Note: This command assumes your local Supabase structure is correct
+      # Using db-password instead of login token for CI/CD
       - name: Link Supabase project
-        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --password ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       # Step 6 & 7: Deploy the individual Edge Functions
       - name: Deploy analyze-intake function
