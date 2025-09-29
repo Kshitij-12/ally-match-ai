@@ -106,21 +106,28 @@ Ensure all scores are between 0.0 and 1.0, with higher scores indicating stronge
       if (jsonMatch) {
         aiAnalysis = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error('No JSON found in OpenAI response');
+        // Try to parse the whole response as JSON (fallback)
+        aiAnalysis = JSON.parse(analysisText);
       }
     } catch (parseError) {
-      console.error('Error parsing OpenAI response:', parseError);
-      throw new Error('Failed to parse AI analysis');
+      console.error('Error parsing OpenAI response:', parseError, '\nRaw response:', analysisText);
+      throw new Error('Failed to parse AI analysis. Please try again or contact support.');
     }
 
     // Save intake response to database
+    // Ensure specificConcerns is always an array of strings
+    let specificConcerns = intakeData.specificConcerns;
+    if (!Array.isArray(specificConcerns)) {
+      specificConcerns = typeof specificConcerns === 'string' && specificConcerns.length > 0 ? [specificConcerns] : [];
+    }
+
     const { data: intakeResponse, error: insertError } = await supabase
       .from('intake_responses')
       .insert({
         user_id: user.id,
         current_situation: intakeData.currentSituation,
         goals: intakeData.goals,
-        specific_concerns: intakeData.specificConcerns,
+        specific_concerns: specificConcerns,
         urgency_level: intakeData.urgencyLevel,
         budget_range: intakeData.budgetRange,
         session_format_preference: intakeData.sessionFormatPreference,

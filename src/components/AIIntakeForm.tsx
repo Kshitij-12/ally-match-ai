@@ -67,6 +67,22 @@ export const AIIntakeForm = ({ onComplete, onBack }: AIIntakeFormProps) => {
     setIsAnalyzing(true);
     
     try {
+      // Basic client-side validation for critical fields
+      if (!formData.concerns || formData.concerns.trim().length === 0) {
+        throw new Error("Please describe your main concerns before proceeding.");
+      }
+
+      // Ensure we have an authenticated session (anonymous if necessary)
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        try {
+          await supabase.auth.signInAnonymously();
+        } catch (authError) {
+          console.error("Anonymous auth failed:", authError);
+          throw new Error("Authentication failed. Please refresh and try again.");
+        }
+      }
+
       // Prepare intake data for AI analysis
       const intakeData = {
         currentSituation: formData.concerns,
@@ -83,18 +99,25 @@ export const AIIntakeForm = ({ onComplete, onBack }: AIIntakeFormProps) => {
       };
 
       // Real AI analysis with OpenAI
+      console.log("Submitting intake to analyze-intake:", intakeData);
       const { data: analysisResult, error: analysisError } = await supabase.functions.invoke('analyze-intake', {
         body: { intakeData }
       });
       
-      if (analysisError) throw analysisError;
+      if (analysisError) {
+        console.error("analyze-intake error:", analysisError);
+        throw new Error(analysisError.message || "Analysis service failed");
+      }
       
       // Generate therapist matches
       const { data: matchesData, error: matchesError } = await supabase.functions.invoke('generate-matches', {
         body: { intakeResponseId: analysisResult.intakeResponseId }
       });
       
-      if (matchesError) throw matchesError;
+      if (matchesError) {
+        console.error("generate-matches error:", matchesError);
+        throw new Error(matchesError.message || "Match generation failed");
+      }
       
       onComplete({ 
         ...formData, 
@@ -107,10 +130,17 @@ export const AIIntakeForm = ({ onComplete, onBack }: AIIntakeFormProps) => {
         description: "AI has analyzed your responses and found personalized therapist matches.",
       });
     } catch (error) {
-      console.error('Analysis error:', error);
+      // Improved error logging and user feedback
+      let errorMsg = "There was an error processing your responses. Please try again.";
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      }
+      console.error('Analysis error:', error, '\nForm data:', formData);
       toast({
         title: "Analysis Failed",
-        description: "There was an error processing your responses. Please try again.",
+        description: errorMsg + " If this persists, please contact support.",
         variant: "destructive",
       });
     } finally {
