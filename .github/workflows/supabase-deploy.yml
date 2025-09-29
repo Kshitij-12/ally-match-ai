@@ -1,3 +1,5 @@
+# This workflow deploys Supabase Edge Functions on pushes to the main branch.
+
 name: Deploy Supabase Edge Functions
 
 on:
@@ -9,27 +11,37 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Check out the repository code
       - uses: actions/checkout@v3
 
+      # Step 2: Set up Node.js environment (required for Supabase functions)
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
+      # Step 3: Install Supabase CLI using a more reliable method
       - name: Install Supabase CLI
         run: |
-          wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b ./bin
-          echo "$(pwd)/bin" >> $GITHUB_PATH
+          # Download the official install script and run it
+          curl -sL https://goo.gl/P3wNyu | bash -s -- --dir $HOME/.local/bin
+          # Add the installation directory to the PATH for the current job
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      # Step 4: Verify the CLI installation
       - name: Check Supabase CLI version
         run: supabase --version
 
+      # Step 5: Log in to Supabase using a repository secret
       - name: Login to Supabase
         run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
+        
+      # Step 6: Link the local project to the remote Supabase project
+      # Note: This command assumes your local Supabase structure is correct
       - name: Link Supabase project
         run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
+      # Step 7 & 8: Deploy the individual Edge Functions
       - name: Deploy analyze-intake function
         run: supabase functions deploy analyze-intake
 
