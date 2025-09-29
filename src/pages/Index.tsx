@@ -1,13 +1,65 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import { HeroSection } from "@/components/HeroSection";
+import { AIIntakeForm } from "@/components/AIIntakeForm";
+import { TherapistMatches } from "@/components/TherapistMatches";
+
+type AppState = 'hero' | 'intake' | 'matches';
+
+interface UserData {
+  name: string;
+  email: string;
+  age: string;
+  concerns: string;
+  background: string;
+  preferences: string;
+  communicationStyle: string;
+  therapyType: string[];
+  previousExperience: string;
+  aiAnalysis: any;
+}
 
 const Index = () => {
+  const [currentView, setCurrentView] = useState<AppState>('hero');
+  const [userData, setUserData] = useState<UserData | null>(null);
+
+  const handleGetStarted = () => {
+    setCurrentView('intake');
+  };
+
+  const handleIntakeComplete = (data: UserData) => {
+    setUserData(data);
+    setCurrentView('matches');
+  };
+
+  const handleBackToHero = () => {
+    setCurrentView('hero');
+    setUserData(null);
+  };
+
+  const handleBackToIntake = () => {
+    setCurrentView('intake');
+  };
+
+  if (currentView === 'intake') {
+    return (
+      <AIIntakeForm 
+        onComplete={handleIntakeComplete}
+        onBack={handleBackToHero}
+      />
+    );
+  }
+
+  if (currentView === 'matches' && userData) {
+    return (
+      <TherapistMatches 
+        userData={userData}
+        onBack={handleBackToIntake}
+      />
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <HeroSection onGetStarted={handleGetStarted} />
   );
 };
 
