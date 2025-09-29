@@ -15,11 +15,16 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 18
-
-      - name: Install Supabase CLI
+      - name: Download Supabase CLI
         run: |
-         wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b /usr/local/bin
-      
+          wget -qO supabase.tar.gz https://github.com/supabase/cli/releases/latest/download/supabase-cli-linux-amd64.tar.gz
+          tar -xzf supabase.tar.gz
+          chmod +x supabase
+          sudo mv supabase /usr/local/bin/supabase
+
+      - name: Check Supabase CLI version
+        run: supabase --version
+
       - name: Login to Supabase
         run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
