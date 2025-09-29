@@ -57,8 +57,8 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
   const [selectedTherapist, setSelectedTherapist] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Mock therapist data - in production this would come from your backend/Supabase
-  const therapists: Therapist[] = [
+  // Use real matches from AI analysis if available, otherwise fall back to mock data
+  const therapistMatches = userData.matches || [
     {
       id: "1",
       name: "Dr. Sarah Chen",
@@ -220,12 +220,15 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
 
         {/* Therapist Matches */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {therapists.map((therapist) => (
+          {therapistMatches.map((match) => {
+            const therapist = match.therapist || match;
+            const matchScore = match.match_score ? Math.round(match.match_score * 100) : match.matchScore;
+            return (
             <Card key={therapist.id} className="p-6 card-gradient border-0 shadow-medium hover:shadow-strong transition-smooth">
               {/* Match Score Badge */}
               <div className="flex justify-between items-start mb-4">
                 <Badge variant="default" className="bg-success text-success-foreground">
-                  {therapist.matchScore}% Match
+                  {matchScore}% Match
                 </Badge>
                 <Button 
                   variant="ghost" 
@@ -248,7 +251,7 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                   <p className="text-sm text-muted-foreground">{therapist.title}</p>
                   <div className="flex items-center mt-1">
                     <Star className="w-4 h-4 text-yellow-500 mr-1" />
-                    <span className="text-sm">{therapist.rating} ({therapist.reviewCount} reviews)</span>
+                    <span className="text-sm">{therapist.rating || 4.8} ({therapist.reviewCount || 50} reviews)</span>
                   </div>
                 </div>
               </div>
@@ -256,14 +259,14 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
               {/* Specialties */}
               <div className="mb-4">
                 <div className="flex flex-wrap gap-2">
-                  {therapist.specialties.slice(0, 3).map((specialty) => (
+                  {(therapist.specializations || therapist.specialties || []).slice(0, 3).map((specialty) => (
                     <Badge key={specialty} variant="secondary" className="text-xs">
                       {specialty}
                     </Badge>
                   ))}
-                  {therapist.specialties.length > 3 && (
+                  {(therapist.specializations || therapist.specialties || []).length > 3 && (
                     <Badge variant="secondary" className="text-xs">
-                      +{therapist.specialties.length - 3} more
+                      +{(therapist.specializations || therapist.specialties || []).length - 3} more
                     </Badge>
                   )}
                 </div>
@@ -273,37 +276,37 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
               <div className="space-y-2 text-sm mb-4">
                 <div className="flex items-center">
                   <Award className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.experience} years experience</span>
+                  <span>{therapist.years_experience || therapist.experience} years experience</span>
                 </div>
                 <div className="flex items-center">
                   <MapPin className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.location}</span>
+                  <span>{therapist.location || 'Available online'}</span>
                 </div>
                 <div className="flex items-center">
                   <DollarSign className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.fee} per session</span>
+                  <span>${therapist.hourly_rate || therapist.fee} per session</span>
                 </div>
                 <div className="flex items-center">
                   <Clock className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.availability}</span>
+                  <span>{therapist.availability || 'Available this week'}</span>
                 </div>
               </div>
 
               {/* Session Types */}
               <div className="flex gap-2 mb-4">
-                {therapist.sessionTypes.includes("Video") && (
+                {(therapist.online_sessions || (therapist.sessionTypes && therapist.sessionTypes.includes("Video"))) && (
                   <Badge variant="outline" className="text-xs">
                     <Video className="w-3 h-3 mr-1" />
                     Video
                   </Badge>
                 )}
-                {therapist.sessionTypes.includes("Phone") && (
+                {(therapist.sessionTypes && therapist.sessionTypes.includes("Phone")) && (
                   <Badge variant="outline" className="text-xs">
                     <Phone className="w-3 h-3 mr-1" />
                     Phone
                   </Badge>
                 )}
-                {therapist.sessionTypes.includes("In-Person") && (
+                {(therapist.in_person_sessions || (therapist.sessionTypes && therapist.sessionTypes.includes("In-Person"))) && (
                   <Badge variant="outline" className="text-xs">
                     <MessageCircle className="w-3 h-3 mr-1" />
                     In-Person
@@ -318,32 +321,36 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                   Why This Match?
                 </h4>
                 <ul className="text-xs text-muted-foreground space-y-1">
-                  {therapist.matchReasons.slice(0, 2).map((reason, index) => (
+                  {(match.match_reasons || therapist.matchReasons || []).slice(0, 2).map((reason, index) => (
                     <li key={index} className="flex items-start">
                       <span className="w-1 h-1 bg-primary rounded-full mt-2 mr-2 flex-shrink-0" />
                       {reason}
                     </li>
                   ))}
                 </ul>
+                {match.ai_explanation && (
+                  <p className="text-xs text-muted-foreground mt-2 italic">
+                    "{match.ai_explanation}"
+                  </p>
+                )}
               </div>
 
               {/* Personality Match Bars */}
               <div className="mb-6">
-                <h4 className="text-sm font-medium mb-3">Personality Compatibility</h4>
+                <h4 className="text-sm font-medium mb-3">Match Details</h4>
                 <div className="space-y-2">
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span>Empathy</span>
-                      <span>{Math.round(therapist.personalityMatch.empathy * 100)}%</span>
+                      <span>Overall Score</span>
+                      <span>{matchScore}%</span>
                     </div>
-                    <Progress value={therapist.personalityMatch.empathy * 100} className="h-1" />
+                    <Progress value={matchScore} className="h-1" />
                   </div>
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span>Warmth</span>
-                      <span>{Math.round(therapist.personalityMatch.warmth * 100)}%</span>
+                      <span>Confidence</span>
+                      <span className="capitalize">{match.confidence_level || 'High'}</span>
                     </div>
-                    <Progress value={therapist.personalityMatch.warmth * 100} className="h-1" />
                   </div>
                 </div>
               </div>
@@ -374,20 +381,21 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                 <div className="mt-4 pt-4 border-t space-y-3 animate-fade-in">
                   <div>
                     <h5 className="font-medium text-sm mb-1">About</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.bio}</p>
+                    <p className="text-xs text-muted-foreground">{therapist.bio || 'Experienced therapist committed to helping clients achieve their goals.'}</p>
                   </div>
                   <div>
                     <h5 className="font-medium text-sm mb-1">Approach</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.approach}</p>
+                    <p className="text-xs text-muted-foreground">{therapist.approach_style || therapist.approach || 'Client-centered approach with evidence-based techniques'}</p>
                   </div>
                   <div>
-                    <h5 className="font-medium text-sm mb-1">Education</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.education}</p>
+                    <h5 className="font-medium text-sm mb-1">Specializations</h5>
+                    <p className="text-xs text-muted-foreground">{(therapist.specializations || therapist.specialties || []).join(', ')}</p>
                   </div>
                 </div>
               )}
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {/* CTA Section */}

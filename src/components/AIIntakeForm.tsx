@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Brain, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface FormData {
   name: string;
@@ -23,7 +24,7 @@ interface FormData {
 }
 
 interface AIIntakeFormProps {
-  onComplete: (data: FormData & { aiAnalysis: any }) => void;
+  onComplete: (data: FormData & { aiAnalysis: any; matches?: any[] }) => void;
   onBack: () => void;
 }
 
@@ -66,32 +67,50 @@ export const AIIntakeForm = ({ onComplete, onBack }: AIIntakeFormProps) => {
     setIsAnalyzing(true);
     
     try {
-      // Simulate AI analysis - In production, this would call OpenAI API
-      const mockAIAnalysis = {
-        personalityScore: {
-          empathy: Math.random() * 0.4 + 0.6, // 0.6-1.0
-          directness: Math.random() * 0.6 + 0.2, // 0.2-0.8
-          structure: Math.random() * 0.5 + 0.3, // 0.3-0.8
-          warmth: Math.random() * 0.4 + 0.6, // 0.6-1.0
-        },
-        communicationPreference: formData.communicationStyle,
-        primaryConcerns: formData.concerns.split('.')[0],
-        recommendedApproaches: ["CBT", "Humanistic", "Psychodynamic"],
-        urgencyLevel: "moderate",
+      // Prepare intake data for AI analysis
+      const intakeData = {
+        currentSituation: formData.concerns,
+        goals: formData.preferences,
+        specificConcerns: formData.therapyType,
+        urgencyLevel: 'moderate',
+        budgetRange: '$100-150',
+        sessionFormatPreference: 'video',
+        therapyTypePreference: formData.therapyType.join(', '),
+        communicationStylePreference: formData.communicationStyle,
+        preferredLanguage: 'English',
+        previousTherapy: formData.previousExperience.length > 0,
+        preferredGender: 'any'
       };
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      onComplete({ ...formData, aiAnalysis: mockAIAnalysis });
+      // Real AI analysis with OpenAI
+      const { data: analysisResult, error: analysisError } = await supabase.functions.invoke('analyze-intake', {
+        body: { intakeData }
+      });
+      
+      if (analysisError) throw analysisError;
+      
+      // Generate therapist matches
+      const { data: matchesData, error: matchesError } = await supabase.functions.invoke('generate-matches', {
+        body: { intakeResponseId: analysisResult.intakeResponseId }
+      });
+      
+      if (matchesError) throw matchesError;
+      
+      onComplete({ 
+        ...formData, 
+        aiAnalysis: analysisResult.analysis,
+        matches: matchesData.matches || []
+      });
+      
       toast({
         title: "Analysis Complete!",
-        description: "We've found your perfect therapist matches.",
+        description: "AI has analyzed your responses and found personalized therapist matches.",
       });
     } catch (error) {
+      console.error('Analysis error:', error);
       toast({
         title: "Analysis Failed",
-        description: "Please try again or contact support.",
+        description: "There was an error processing your responses. Please try again.",
         variant: "destructive",
       });
     } finally {

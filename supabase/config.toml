@@ -1,1 +1,7 @@
 project_id = "zuzlmfntigskoxhwbiav"
+
+[functions.analyze-intake]
+verify_jwt = true
+
+[functions.generate-matches]
+verify_jwt = true
