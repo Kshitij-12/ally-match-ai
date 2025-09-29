@@ -20,32 +20,29 @@ jobs:
         with:
           node-version: 18
 
-      # Step 3: Install Supabase CLI using a more reliable method
+      # --- FIX: Using the official Supabase CLI Setup Action ---
+      # This action automatically handles installation and pathing.
       - name: Install Supabase CLI
-        run: |
-          # Download the official install script and run it
-          curl -sL https://goo.gl/P3wNyu | bash -s -- --dir $HOME/.local/bin
-          # Add the installation directory to the PATH for the current job
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      # Step 4: Verify the CLI installation
+        uses: supabase/cli/setup-cli@v1
+        with:
+          version: latest
+          
+      # Step 3: Verify the CLI installation (Optional, but good for debugging)
       - name: Check Supabase CLI version
         run: supabase --version
 
-      # Step 5: Log in to Supabase using a repository secret
+      # Step 4: Log in to Supabase using a repository secret
       - name: Login to Supabase
         run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         
-      # Step 6: Link the local project to the remote Supabase project
+      # Step 5: Link the local project to the remote Supabase project
       # Note: This command assumes your local Supabase structure is correct
       - name: Link Supabase project
         run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
-      # Step 7 & 8: Deploy the individual Edge Functions
+      # Step 6 & 7: Deploy the individual Edge Functions
       - name: Deploy analyze-intake function
         run: supabase functions deploy analyze-intake
 
       - name: Deploy generate-matches function
         run: supabase functions deploy generate-matches
-
-   
