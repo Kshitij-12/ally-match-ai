@@ -18,8 +18,9 @@ jobs:
 
       - name: Install Supabase CLI
         run: |
-          wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b ./bin
-          echo "$(pwd)/bin" >> $GITHUB_PATH
+         wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b ./bin
+         echo "$(pwd)/bin" >> $GITHUB_PATH_PATH
+         export PATH="$(pwd)/bin:$PATH"
 
       - name: Check Supabase CLI version
         run: supabase --version
