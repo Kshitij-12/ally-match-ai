@@ -18,13 +18,9 @@ jobs:
 
       - name: Install Supabase CLI
         run: |
-         wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b ./bin
-         echo "$(pwd)/bin" >> $GITHUB_PATH
-         export PATH="$(pwd)/bin:$PATH"
+          wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b ./bin
+          echo "$(pwd)/bin" >> $GITHUB_PATH
 
-           - name: Install Supabase CLI
-             run: npm install -g supabase
-        
       - name: Check Supabase CLI version
         run: supabase --version
 
@@ -39,6 +35,5 @@ jobs:
 
       - name: Deploy generate-matches function
         run: supabase functions deploy generate-matches
-      
 
    
