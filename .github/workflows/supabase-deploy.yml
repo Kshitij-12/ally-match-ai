@@ -21,22 +21,20 @@ jobs:
          wget -qO- https://github.com/supabase/cli/releases/latest/download/install.sh | bash -s -- -b ./bin
          echo "$(pwd)/bin" >> $GITHUB_PATH
 
+         - name: Check Supabase CLI version
+           run: supabase --version
 
-- name: Check Supabase CLI version
-  run: supabase --version
+           - name: Login to Supabase
+             run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-- name: Login to Supabase
-  run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+             - name: Link Supabase project
+              run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
-- name: Link Supabase project
-  run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+            - name: Deploy analyze-intake function
+              run: supabase functions deploy analyze-intake
 
-- name: Deploy analyze-intake function
-  run: supabase functions deploy analyze-intake
-
-- name: Deploy generate-matches function
-  run: supabase functions deploy generate-matches
-       
+           - name: Deploy generate-matches function
+             run: supabase functions deploy generate-matches
       
 
    
