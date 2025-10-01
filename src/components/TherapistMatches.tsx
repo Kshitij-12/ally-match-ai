@@ -22,32 +22,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import therapistsImage from "@/assets/therapists-group.jpg";
 
-interface Therapist {
-  id: string;
-  name: string;
-  title: string;
-  specialties: string[];
-  experience: number;
-  rating: number;
-  reviewCount: number;
-  location: string;
-  sessionTypes: string[];
-  fee: string;
-  availability: string;
-  photo: string;
-  bio: string;
-  approach: string;
-  education: string;
-  matchScore: number;
-  matchReasons: string[];
-  personalityMatch: {
-    empathy: number;
-    directness: number;
-    structure: number;
-    warmth: number;
-  };
-}
-
 interface TherapistMatchesProps {
   userData: any;
   onBack: () => void;
@@ -57,36 +31,39 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
   const [selectedTherapist, setSelectedTherapist] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Debug: Log the actual API response to see the real field names
-  console.log("API Response - userData.matches:", userData.matches);
-  if (userData.matches && userData.matches.length > 0) {
-    console.log("First match structure:", userData.matches[0]);
+  // DEBUG: Let's see EXACTLY what we're getting
+  console.log("=== DEBUG THERAPIST MATCHES ===");
+  console.log("Full userData:", userData);
+  console.log("userData.matches:", userData?.matches);
+  console.log("Matches length:", userData?.matches?.length);
+  
+  if (userData?.matches && userData.matches.length > 0) {
+    console.log("First match object:", userData.matches[0]);
+    console.log("All keys in first match:", Object.keys(userData.matches[0]));
+  } else {
+    console.log("NO MATCHES FOUND - using fallback data");
   }
 
   // Use real matches from AI analysis if available, otherwise fall back to mock data
-  const therapistMatches = userData.matches || [
+  const therapistMatches = userData?.matches || [
     {
-      id: "1",
-      name: "Dr. Sarah Chen",
-      title: "Licensed Clinical Psychologist",
-      specialties: ["Anxiety", "Depression", "CBT", "Mindfulness"],
+      id: "debug-1",
+      name: "DEBUG Dr. Sarah Chen",
+      title: "DEBUG Licensed Clinical Psychologist", 
+      specialties: ["DEBUG Anxiety", "DEBUG Depression"],
       experience: 8,
       rating: 4.9,
       reviewCount: 127,
-      location: "San Francisco, CA",
-      sessionTypes: ["Video", "In-Person"],
-      fee: "$150-180",
+      location: "DEBUG San Francisco, CA",
+      sessionTypes: ["Video"],
+      fee: "$150",
       availability: "Available this week",
       photo: therapistsImage,
-      bio: "I believe in creating a warm, non-judgmental space where clients feel safe to explore their thoughts and feelings. My approach combines evidence-based techniques with genuine empathy.",
-      approach: "Cognitive Behavioral Therapy with Mindfulness integration",
-      education: "PhD in Clinical Psychology, Stanford University",
+      bio: "DEBUG Bio here",
+      approach: "DEBUG Approach",
+      education: "DEBUG Education",
       matchScore: 94,
-      matchReasons: [
-        "Communication style perfectly matches your preference for collaborative approach",
-        "Specializes in anxiety which aligns with your primary concerns",
-        "High empathy and warmth scores match your personality profile"
-      ],
+      matchReasons: ["DEBUG Reason 1", "DEBUG Reason 2"],
       personalityMatch: {
         empathy: 0.92,
         directness: 0.65,
@@ -96,10 +73,12 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
     }
   ];
 
+  console.log("Final therapistMatches to render:", therapistMatches);
+
   const handleBookConsultation = (therapistId: string, therapistName: string) => {
     toast({
       title: "Consultation Requested",
-      description: `We'll send you booking details for Dr. ${therapistName} within 24 hours.`,
+      description: `We'll send you booking details for ${therapistName} within 24 hours.`,
     });
   };
 
@@ -108,38 +87,6 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
       title: "Saved to Favorites",
       description: "This therapist has been added to your favorites list.",
     });
-  };
-
-  // Helper function to safely extract therapist data with fallbacks
-  const getTherapistData = (match: any) => {
-    // Try multiple possible field names from your API
-    const therapist = match.therapist || match.raw_therapist || match;
-    
-    return {
-      id: therapist.id || therapist.therapist_id || `temp-${Math.random()}`,
-      name: therapist.name || therapist.full_name || "Therapist",
-      title: therapist.title || therapist.credentials || "Licensed Therapist",
-      specialties: therapist.specialties || therapist.specializations || therapist.expertise || ["General practice"],
-      experience: therapist.experience || therapist.years_experience || 5,
-      rating: therapist.rating || therapist.avg_rating || 4.5,
-      reviewCount: therapist.reviewCount || therapist.review_count || therapist.num_reviews || 50,
-      location: therapist.location || therapist.city_state || "Available online",
-      sessionTypes: therapist.sessionTypes || therapist.session_types || ["Video"],
-      fee: therapist.fee || therapist.hourly_rate || therapist.session_fee || "$120-150",
-      availability: therapist.availability || "Available this week",
-      photo: therapist.photo || therapist.profile_picture || therapistsImage,
-      bio: therapist.bio || therapist.biography || "Experienced therapist committed to helping clients achieve their goals.",
-      approach: therapist.approach || therapist.approach_style || therapist.therapy_approach || "Various approaches",
-      education: therapist.education || therapist.credentials_detail || "Licensed professional",
-      matchScore: match.match_score || match.matchScore || match.score || 85,
-      matchReasons: match.match_reasons || therapist.matchReasons || ["Communication style match", "Language compatibility", "Within budget range"],
-      personalityMatch: therapist.personalityMatch || {
-        empathy: 0.8,
-        directness: 0.6,
-        structure: 0.7,
-        warmth: 0.8
-      }
-    };
   };
 
   return (
@@ -155,61 +102,36 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold mb-4">Your Perfect Therapist Matches</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Based on your AI personality analysis, we've found {therapistMatches.length} therapists who align with your communication style and therapeutic needs.
+              Based on your AI personality analysis, we've found {therapistMatches.length} therapists.
             </p>
           </div>
 
-          {/* AI Analysis Summary */}
-          <Card className="p-6 card-gradient border-0 shadow-medium mb-8">
-            <div className="flex items-center mb-4">
-              <Brain className="w-6 h-6 text-primary mr-3" />
-              <h2 className="text-xl font-semibold">Your AI Personality Profile</h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Empathy Need</span>
-                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.empathy || 0.7) * 100)}%</span>
-                </div>
-                <Progress value={(userData.aiAnalysis?.personalityScore?.empathy || 0.7) * 100} className="h-2" />
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Direct Communication</span>
-                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.directness || 0.6) * 100)}%</span>
-                </div>
-                <Progress value={(userData.aiAnalysis?.personalityScore?.directness || 0.6) * 100} className="h-2" />
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Structure Preference</span>
-                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.structure || 0.5) * 100)}%</span>
-                </div>
-                <Progress value={(userData.aiAnalysis?.personalityScore?.structure || 0.5) * 100} className="h-2" />
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Warmth Need</span>
-                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.warmth || 0.8) * 100)}%</span>
-                </div>
-                <Progress value={(userData.aiAnalysis?.personalityScore?.warmth || 0.8) * 100} className="h-2" />
-              </div>
-            </div>
+          {/* DEBUG INFO - Remove this card later */}
+          <Card className="p-4 mb-4 bg-yellow-100 border-yellow-400">
+            <h3 className="font-bold mb-2">🚨 DEBUG INFO 🚨</h3>
+            <p><strong>Matches count:</strong> {therapistMatches.length}</p>
+            <p><strong>Using real data:</strong> {!!userData?.matches ? "YES" : "NO"}</p>
+            <p><strong>First therapist name:</strong> {therapistMatches[0]?.name || "NOT FOUND"}</p>
+            <p><strong>First therapist keys:</strong> {therapistMatches[0] ? Object.keys(therapistMatches[0]).join(", ") : "No data"}</p>
           </Card>
         </div>
 
         {/* Therapist Matches */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {therapistMatches.map((match, index) => {
-            const therapist = getTherapistData(match);
-            const matchScore = therapist.matchScore;
-
+          {therapistMatches.map((therapist: any, index: number) => {
+            console.log(`Rendering therapist ${index}:`, therapist);
+            
             return (
-            <Card key={therapist.id} className="p-6 card-gradient border-0 shadow-medium hover:shadow-strong transition-smooth">
+            <Card key={therapist.id || `therapist-${index}`} className="p-6 border-2 border-blue-500">
+              {/* DEBUG Badge */}
+              <Badge variant="outline" className="mb-2 bg-red-100 text-red-800">
+                DEBUG: {therapist.name ? "HAS NAME" : "NO NAME"}
+              </Badge>
+
               {/* Match Score Badge */}
               <div className="flex justify-between items-start mb-4">
                 <Badge variant="default" className="bg-success text-success-foreground">
-                  {matchScore}% Match
+                  {therapist.matchScore || therapist.match_score || 85}% Match
                 </Badge>
                 <Button 
                   variant="ghost" 
@@ -220,19 +142,25 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                 </Button>
               </div>
 
-              {/* Therapist Info */}
+              {/* Therapist Info - SIMPLIFIED FOR DEBUGGING */}
               <div className="flex items-center mb-4">
                 <img 
-                  src={therapist.photo} 
-                  alt={therapist.name}
-                  className="w-16 h-16 rounded-full object-cover mr-4"
+                  src={therapist.photo || therapistsImage} 
+                  alt={therapist.name || "Therapist"}
+                  className="w-16 h-16 rounded-full object-cover mr-4 border-2 border-green-500"
                 />
                 <div>
-                  <h3 className="text-lg font-semibold">{therapist.name}</h3>
-                  <p className="text-sm text-muted-foreground">{therapist.title}</p>
+                  <h3 className="text-lg font-semibold text-red-600">
+                    {therapist.name || "NO NAME FOUND"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {therapist.title || therapist.credentials || "Licensed Therapist"}
+                  </p>
                   <div className="flex items-center mt-1">
                     <Star className="w-4 h-4 text-yellow-500 mr-1" />
-                    <span className="text-sm">{therapist.rating} ({therapist.reviewCount} reviews)</span>
+                    <span className="text-sm">
+                      {therapist.rating || 4.5} ({therapist.reviewCount || therapist.review_count || 50} reviews)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -240,149 +168,33 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
               {/* Specialties */}
               <div className="mb-4">
                 <div className="flex flex-wrap gap-2">
-                  {therapist.specialties.slice(0, 3).map((specialty: string) => (
+                  {(therapist.specialties || therapist.specializations || ["General practice"]).slice(0, 3).map((specialty: string) => (
                     <Badge key={specialty} variant="secondary" className="text-xs">
                       {specialty}
                     </Badge>
                   ))}
-                  {therapist.specialties.length > 3 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{therapist.specialties.length - 3} more
-                    </Badge>
-                  )}
                 </div>
               </div>
 
-              {/* Quick Info */}
-              <div className="space-y-2 text-sm mb-4">
-                <div className="flex items-center">
-                  <Award className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.experience} years experience</span>
-                </div>
-                <div className="flex items-center">
-                  <MapPin className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.location}</span>
-                </div>
-                <div className="flex items-center">
-                  <DollarSign className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.fee} per session</span>
-                </div>
-                <div className="flex items-center">
-                  <Clock className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.availability}</span>
-                </div>
-              </div>
+              {/* Simple Action Button */}
+              <Button 
+                variant="therapy" 
+                className="w-full"
+                onClick={() => handleBookConsultation(therapist.id, therapist.name || "Therapist")}
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Book Free Consultation
+              </Button>
 
-              {/* Session Types */}
-              <div className="flex gap-2 mb-4">
-                {therapist.sessionTypes.includes("Video") && (
-                  <Badge variant="outline" className="text-xs">
-                    <Video className="w-3 h-3 mr-1" />
-                    Video
-                  </Badge>
-                )}
-                {therapist.sessionTypes.includes("Phone") && (
-                  <Badge variant="outline" className="text-xs">
-                    <Phone className="w-3 h-3 mr-1" />
-                    Phone
-                  </Badge>
-                )}
-                {therapist.sessionTypes.includes("In-Person") && (
-                  <Badge variant="outline" className="text-xs">
-                    <MessageCircle className="w-3 h-3 mr-1" />
-                    In-Person
-                  </Badge>
-                )}
+              {/* RAW DATA DEBUG */}
+              <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
+                <strong>Raw data:</strong>
+                <pre>{JSON.stringify(therapist, null, 2)}</pre>
               </div>
-
-              {/* Match Reasons */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium mb-2 flex items-center">
-                  <CheckCircle className="w-4 h-4 text-success mr-2" />
-                  Why This Match?
-                </h4>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  {therapist.matchReasons.slice(0, 2).map((reason: string, index: number) => (
-                    <li key={index} className="flex items-start">
-                      <span className="w-1 h-1 bg-primary rounded-full mt-2 mr-2 flex-shrink-0" />
-                      {reason}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Personality Match Bars */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium mb-3">Match Details</h4>
-                <div className="space-y-2">
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>Overall Score</span>
-                      <span>{matchScore}%</span>
-                    </div>
-                    <Progress value={matchScore} className="h-1" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2">
-                <Button 
-                  variant="therapy" 
-                  className="w-full"
-                  onClick={() => handleBookConsultation(therapist.id, therapist.name)}
-                >
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Book Free Consultation
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full"
-                  onClick={() => setSelectedTherapist(selectedTherapist === therapist.id ? null : therapist.id)}
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  {selectedTherapist === therapist.id ? 'Hide Details' : 'View Full Profile'}
-                </Button>
-              </div>
-
-              {/* Expanded Details */}
-              {selectedTherapist === therapist.id && (
-                <div className="mt-4 pt-4 border-t space-y-3 animate-fade-in">
-                  <div>
-                    <h5 className="font-medium text-sm mb-1">About</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.bio}</p>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-sm mb-1">Approach</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.approach}</p>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-sm mb-1">Specializations</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.specialties.join(', ')}</p>
-                  </div>
-                </div>
-              )}
             </Card>
             );
           })}
         </div>
-
-        {/* CTA Section */}
-        <Card className="mt-12 p-8 text-center card-gradient border-0 shadow-medium">
-          <h2 className="text-2xl font-bold mb-4">Not quite right?</h2>
-          <p className="text-muted-foreground mb-6">
-            We can refine your matches based on additional preferences or help you explore more options.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="outline">
-              Refine My Matches
-            </Button>
-            <Button variant="therapy">
-              View All Therapists
-            </Button>
-          </div>
-        </Card>
       </div>
     </div>
   );
