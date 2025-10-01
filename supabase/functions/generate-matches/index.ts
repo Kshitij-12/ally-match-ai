@@ -13,24 +13,55 @@ serve(async (req) => {
   }
 
   try {
-    const { intakeResponseId } = await req.json();
-    const authHeader = req.headers.get('Authorization')!;
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
+    console.log('generate-matches function started');
     
-    // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
+    const { intakeResponseId } = await req.json();
+    console.log('Received intakeResponseId:', intakeResponseId);
+    
+    if (!intakeResponseId) {
+      return new Response(JSON.stringify({ error: 'intakeResponseId is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    console.log('Generating matches for intake response:', intakeResponseId);
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Get environment variables
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
+
+    console.log('Env check - Has OpenAI Key:', !!OPENAI_API_KEY);
+    console.log('Env check - Has Supabase URL:', !!SUPABASE_URL);
+    console.log('Env check - Has Supabase Anon Key:', !!SUPABASE_ANON_KEY);
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      throw new Error('Missing Supabase environment variables');
+    }
+    
+    // Initialize Supabase client
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('Auth error:', userError);
+      return new Response(JSON.stringify({ error: 'User not authenticated' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('Generating matches for user:', user.id, 'intake:', intakeResponseId);
 
     // Get the intake response with AI analysis
     const { data: intakeResponse, error: intakeError } = await supabase
@@ -41,8 +72,14 @@ serve(async (req) => {
       .single();
 
     if (intakeError || !intakeResponse) {
-      throw new Error('Intake response not found');
+      console.error('Intake response error:', intakeError);
+      return new Response(JSON.stringify({ error: 'Intake response not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    console.log('Found intake response:', intakeResponse.id);
 
     // Get all available therapists
     const { data: therapists, error: therapistsError } = await supabase
@@ -51,283 +88,268 @@ serve(async (req) => {
       .eq('availability_status', 'available');
 
     if (therapistsError) {
-      throw new Error(`Failed to fetch therapists: ${therapistsError.message}`);
+      console.error('Therapists fetch error:', therapistsError);
+      return new Response(JSON.stringify({ error: `Failed to fetch therapists: ${therapistsError.message}` }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    console.log(`Found ${therapists.length} available therapists`);
+    console.log(`Found ${therapists?.length || 0} available therapists`);
 
-    // Helper: simple heuristic fallback scoring when OpenAI is unavailable or fails
-    const computeHeuristic = (intake: any, therapist: any) => {
+    if (!therapists || therapists.length === 0) {
+      return new Response(JSON.stringify({
+        success: true,
+        matches: [],
+        message: 'No available therapists found'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Enhanced heuristic matching function
+    const computeHeuristicMatch = (intake: any, therapist: any) => {
       let score = 0;
       let reasons: string[] = [];
 
-      // Communication style alignment
-      if (intake.communication_style_preference && therapist.communication_style) {
-        if (String(therapist.communication_style).toLowerCase().includes(String(intake.communication_style_preference).toLowerCase())) {
-          score += 0.2;
-          reasons.push('Communication style alignment');
+      try {
+        // Communication style alignment (25% weight)
+        const intakeCommStyle = String(intake?.communication_style_preference || '').toLowerCase();
+        const therapistCommStyle = String(therapist?.communication_style || '').toLowerCase();
+        
+        if (intakeCommStyle && therapistCommStyle) {
+          if (therapistCommStyle.includes(intakeCommStyle) || intakeCommStyle.includes(therapistCommStyle)) {
+            score += 0.25;
+            reasons.push('Communication style match');
+          }
         }
-      }
 
-      // Therapy type overlap
-      const intakeTypes = String(intake.therapy_type_preference || '').toLowerCase().split(/[,|]/).map((s: string) => s.trim()).filter(Boolean);
-      const therapistTypes: string[] = Array.isArray(therapist.therapy_types) ? therapist.therapy_types : [];
-      const overlap = therapistTypes.filter((t: string) => intakeTypes.some((i) => t.toLowerCase().includes(i)));
-      if (overlap.length > 0) {
-        score += Math.min(0.3, 0.1 * overlap.length);
-        reasons.push('Therapy approach overlap');
-      }
+        // Therapy type overlap (30% weight)
+        let intakeTherapyTypes: string[] = [];
+        if (Array.isArray(intake?.therapy_type_preference)) {
+          intakeTherapyTypes = intake.therapy_type_preference.map((t: any) => String(t).toLowerCase());
+        } else if (intake?.therapy_type_preference) {
+          intakeTherapyTypes = String(intake.therapy_type_preference).toLowerCase().split(/[,|&]/).map((s: string) => s.trim()).filter(Boolean);
+        }
 
-      // Language
-      const langs: string[] = Array.isArray(therapist.languages) ? therapist.languages : [];
-      if (langs.some((l) => String(l).toLowerCase().includes(String(intake.preferred_language || 'english').toLowerCase()))) {
-        score += 0.1;
-        reasons.push('Preferred language supported');
-      }
+        let therapistTherapyTypes: string[] = [];
+        if (Array.isArray(therapist?.therapy_types)) {
+          therapistTherapyTypes = therapist.therapy_types.map((t: any) => String(t).toLowerCase());
+        } else if (therapist?.therapy_types) {
+          therapistTherapyTypes = String(therapist.therapy_types).toLowerCase().split(/[,|&]/).map((s: string) => s.trim()).filter(Boolean);
+        }
 
-      // Budget (simple heuristic: within +/- 50 of mid of range)
-      const budgetStr: string = String(intake.budget_range || '');
-      const match = budgetStr.match(/\$?(\d+)\s*-\s*\$?(\d+)/);
-      const hourly = Number(therapist.hourly_rate);
-      if (match && hourly) {
-        const lo = Number(match[1]);
-        const hi = Number(match[2]);
-        const mid = (lo + hi) / 2;
-        const diff = Math.abs(hourly - mid);
-        if (diff <= 50) {
+        const therapyOverlap = therapistTherapyTypes.filter((t: string) => 
+          intakeTherapyTypes.some((i: string) => t.includes(i) || i.includes(t))
+        ).length;
+
+        if (therapyOverlap > 0) {
+          score += Math.min(0.3, 0.1 * therapyOverlap);
+          reasons.push(`Shared therapy approaches: ${therapyOverlap}`);
+        }
+
+        // Language compatibility (15% weight)
+        const preferredLanguage = String(intake?.preferred_language || 'english').toLowerCase();
+        let therapistLanguages: string[] = [];
+        
+        if (Array.isArray(therapist?.languages)) {
+          therapistLanguages = therapist.languages.map((l: any) => String(l).toLowerCase());
+        } else if (therapist?.languages) {
+          therapistLanguages = String(therapist.languages).toLowerCase().split(/[,|&]/).map((s: string) => s.trim()).filter(Boolean);
+        }
+
+        if (therapistLanguages.some((lang: string) => lang.includes(preferredLanguage) || preferredLanguage.includes(lang))) {
           score += 0.15;
-          reasons.push('Within budget range');
+          reasons.push('Language compatibility');
         }
+
+        // Budget alignment (20% weight)
+        const therapistRate = Number(therapist?.hourly_rate || 0);
+        const budgetStr = String(intake?.budget_range || '');
+        const budgetMatch = budgetStr.match(/\$?(\d+)\s*-\s*\$?(\d+)/);
+        
+        if (budgetMatch && therapistRate > 0) {
+          const lowBudget = Number(budgetMatch[1]);
+          const highBudget = Number(budgetMatch[2]);
+          
+          if (therapistRate >= lowBudget && therapistRate <= highBudget) {
+            score += 0.2;
+            reasons.push('Within budget range');
+          } else if (therapistRate <= highBudget + 20) {
+            score += 0.1;
+            reasons.push('Near budget range');
+          }
+        }
+
+        // Experience bonus (10% weight)
+        const yearsExp = Number(therapist?.years_experience || 0);
+        if (yearsExp >= 5) {
+          score += 0.1;
+          reasons.push('Experienced therapist');
+        }
+
+        // Normalize score
+        score = Math.max(0, Math.min(1, score));
+        
+      } catch (error) {
+        console.error('Error in heuristic calculation:', error);
+        // Provide a minimal score if calculation fails
+        score = 0.3;
+        reasons = ['Basic compatibility'];
       }
 
-      // Experience boost
-      const years = Number(therapist.years_experience || 0);
-      if (years >= 5) {
-        score += 0.1;
-        reasons.push('Experienced therapist');
-      }
-
-      // Availability
-      if (therapist.availability_status === 'available') {
-        score += 0.05;
-      }
-
-      // Normalize to [0,1]
-      score = Math.max(0, Math.min(1, score));
       return {
         matchScore: score,
         confidenceLevel: score >= 0.7 ? 'high' : score >= 0.4 ? 'medium' : 'low',
         matchReasons: reasons,
-        explanation: 'Heuristic-based match computed due to AI unavailability.'
+        explanation: 'Algorithm-based matching using profile compatibility analysis.'
       };
     };
 
-    // Generate matches using OpenAI when possible for each therapist
+    // Process matches - limit to reasonable number for performance
+    const therapistsToProcess = therapists.slice(0, 8); // Reduced for better performance
     const matches = [];
     
-    for (const therapist of therapists.slice(0, 10)) { // Limit to top 10 for processing
-      const matchingPrompt = `
-Analyze the compatibility between this client and therapist:
+    console.log(`Processing ${therapistsToProcess.length} therapists for matching...`);
 
-CLIENT PROFILE:
-- Current Situation: ${intakeResponse.current_situation}
-- Goals: ${intakeResponse.goals}
-- Communication Style: ${intakeResponse.communication_style_preference}
-- Therapy Type Preference: ${intakeResponse.therapy_type_preference}
-- Budget Range: ${intakeResponse.budget_range}
-- Session Format: ${intakeResponse.session_format_preference}
-- Urgency: ${intakeResponse.urgency_level}
-- AI Analysis: ${JSON.stringify(intakeResponse.ai_analysis)}
+    for (const therapist of therapistsToProcess) {
+      try {
+        console.log(`Processing therapist: ${therapist.name || therapist.id}`);
+        
+        let matchResult;
+        
+        // Use OpenAI if available and key is set
+        if (OPENAI_API_KEY && OPENAI_API_KEY !== '') {
+          try {
+            const matchingPrompt = `
+Analyze compatibility between client and therapist:
 
-THERAPIST PROFILE:
-- Name: ${therapist.name}
-- Specializations: ${therapist.specializations?.join(', ') || 'General practice'}
-- Communication Style: ${therapist.communication_style}
-- Approach: ${therapist.approach_style}
-- Therapy Types: ${therapist.therapy_types?.join(', ') || 'Various'}
-- Years Experience: ${therapist.years_experience}
-- Hourly Rate: $${therapist.hourly_rate}
-- Languages: ${therapist.languages?.join(', ') || 'English'}
+CLIENT:
+- Situation: ${intakeResponse.current_situation || 'Not specified'}
+- Goals: ${intakeResponse.goals || 'Not specified'}
+- Communication: ${intakeResponse.communication_style_preference || 'Not specified'}
+- Therapy Preference: ${intakeResponse.therapy_type_preference || 'Not specified'}
+- Budget: ${intakeResponse.budget_range || 'Not specified'}
 
-Provide a JSON response with:
+THERAPIST:
+- Name: ${therapist.name || 'Unnamed'}
+- Specializations: ${Array.isArray(therapist.specializations) ? therapist.specializations.join(', ') : therapist.specializations || 'General'}
+- Communication Style: ${therapist.communication_style || 'Not specified'}
+- Therapy Types: ${Array.isArray(therapist.therapy_types) ? therapist.therapy_types.join(', ') : therapist.therapy_types || 'Various'}
+- Experience: ${therapist.years_experience || 'Unknown'} years
+- Rate: $${therapist.hourly_rate || 'Unknown'}
+
+Provide JSON response with:
 {
   "matchScore": 0.0-1.0,
   "confidenceLevel": "high|medium|low",
-  "matchReasons": ["reason1", "reason2", "reason3"],
-  "explanation": "detailed explanation of why this is a good/poor match"
-}
+  "matchReasons": ["reason1", "reason2"],
+  "explanation": "brief explanation"
+}`;
 
-Consider personality compatibility, therapeutic approach alignment, specialization relevance, and practical factors.`;
+            const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'gpt-3.5-turbo', // Use more reliable model
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are a therapist matching expert. Return ONLY valid JSON, no other text.'
+                  },
+                  {
+                    role: 'user',
+                    content: matchingPrompt
+                  }
+                ],
+                max_tokens: 500,
+                temperature: 0.2,
+              }),
+            });
 
-      try {
-        if (OPENAI_API_KEY) {
-          const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${OPENAI_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'gpt-4o',
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are an expert in therapist-client matching. Provide accurate compatibility assessments based on therapeutic needs and professional qualifications.'
-                },
-                {
-                  role: 'user',
-                  content: matchingPrompt
-                }
-              ],
-              max_tokens: 800,
-              temperature: 0.2,
-            }),
-          });
-
-          if (openAIResponse.ok) {
-            const openAIData = await openAIResponse.json();
-            const analysisText = openAIData.choices[0].message.content;
-            try {
-              const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                const matchAnalysis = JSON.parse(jsonMatch[0]);
-                const { data: savedMatch, error: matchError } = await supabase
-                  .from('matches')
-                  .insert({
-                    user_id: user.id,
-                    therapist_id: therapist.id,
-                    intake_response_id: intakeResponseId,
-                    match_score: matchAnalysis.matchScore,
-                    confidence_level: matchAnalysis.confidenceLevel,
-                    match_reasons: matchAnalysis.matchReasons,
-                    ai_explanation: matchAnalysis.explanation,
-                    status: 'pending'
-                  })
-                  .select()
-                  .single();
-
-                if (!matchError && savedMatch) {
-                  matches.push({
-                    ...savedMatch,
-                    therapist: therapist
-                  });
+            if (openAIResponse.ok) {
+              const openAIData = await openAIResponse.json();
+              const analysisText = openAIData.choices[0]?.message?.content;
+              
+              if (analysisText) {
+                try {
+                  // Clean and parse JSON response
+                  const cleanJson = analysisText.replace(/```json\n?|\n?```/g, '').trim();
+                  matchResult = JSON.parse(cleanJson);
+                  console.log(`OpenAI match score for ${therapist.name}: ${matchResult.matchScore}`);
+                } catch (parseError) {
+                  console.error('JSON parse error, using heuristic:', parseError);
+                  matchResult = computeHeuristicMatch(intakeResponse, therapist);
                 }
               } else {
-                // No JSON in response: fallback
-                const h = computeHeuristic(intakeResponse, therapist);
-                const { data: savedMatch, error: matchError } = await supabase
-                  .from('matches')
-                  .insert({
-                    user_id: user.id,
-                    therapist_id: therapist.id,
-                    intake_response_id: intakeResponseId,
-                    match_score: h.matchScore,
-                    confidence_level: h.confidenceLevel,
-                    match_reasons: h.matchReasons,
-                    ai_explanation: h.explanation,
-                    status: 'pending'
-                  })
-                  .select()
-                  .single();
-                if (!matchError && savedMatch) {
-                  matches.push({ ...savedMatch, therapist });
-                }
+                throw new Error('Empty OpenAI response');
               }
-            } catch (parseError) {
-              console.error('Error parsing match analysis for therapist:', therapist.id, parseError);
-              const h = computeHeuristic(intakeResponse, therapist);
-              const { data: savedMatch, error: matchError } = await supabase
-                .from('matches')
-                .insert({
-                  user_id: user.id,
-                  therapist_id: therapist.id,
-                  intake_response_id: intakeResponseId,
-                  match_score: h.matchScore,
-                  confidence_level: h.confidenceLevel,
-                  match_reasons: h.matchReasons,
-                  ai_explanation: h.explanation,
-                  status: 'pending'
-                })
-                .select()
-                .single();
-              if (!matchError && savedMatch) {
-                matches.push({ ...savedMatch, therapist });
-              }
+            } else {
+              console.error('OpenAI API error, using heuristic');
+              matchResult = computeHeuristicMatch(intakeResponse, therapist);
             }
-          } else {
-            // OpenAI call failed: fallback
-            const h = computeHeuristic(intakeResponse, therapist);
-            const { data: savedMatch, error: matchError } = await supabase
-              .from('matches')
-              .insert({
-                user_id: user.id,
-                therapist_id: therapist.id,
-                intake_response_id: intakeResponseId,
-                match_score: h.matchScore,
-                confidence_level: h.confidenceLevel,
-                match_reasons: h.matchReasons,
-                ai_explanation: h.explanation,
-                status: 'pending'
-              })
-              .select()
-              .single();
-            if (!matchError && savedMatch) {
-              matches.push({ ...savedMatch, therapist });
-            }
+          } catch (openAIError) {
+            console.error('OpenAI request failed, using heuristic:', openAIError);
+            matchResult = computeHeuristicMatch(intakeResponse, therapist);
           }
         } else {
-          // No API key: heuristic only
-          const h = computeHeuristic(intakeResponse, therapist);
-          const { data: savedMatch, error: matchError } = await supabase
-            .from('matches')
-            .insert({
-              user_id: user.id,
-              therapist_id: therapist.id,
-              intake_response_id: intakeResponseId,
-              match_score: h.matchScore,
-              confidence_level: h.confidenceLevel,
-              match_reasons: h.matchReasons,
-              ai_explanation: h.explanation,
-              status: 'pending'
-            })
-            .select()
-            .single();
-          if (!matchError && savedMatch) {
-            matches.push({ ...savedMatch, therapist });
-          }
+          // No OpenAI key, use heuristic
+          matchResult = computeHeuristicMatch(intakeResponse, therapist);
         }
-      } catch (error) {
-        console.error('Error analyzing match for therapist:', therapist.id, error);
-        // Final fallback to ensure at least a minimal result
-        const h = computeHeuristic(intakeResponse, therapist);
+
+        // Save match to database
         const { data: savedMatch, error: matchError } = await supabase
           .from('matches')
           .insert({
             user_id: user.id,
             therapist_id: therapist.id,
             intake_response_id: intakeResponseId,
-            match_score: h.matchScore,
-            confidence_level: h.confidenceLevel,
-            match_reasons: h.matchReasons,
-            ai_explanation: h.explanation,
+            match_score: matchResult.matchScore,
+            confidence_level: matchResult.confidenceLevel,
+            match_reasons: matchResult.matchReasons,
+            ai_explanation: matchResult.explanation,
             status: 'pending'
           })
           .select()
           .single();
-        if (!matchError && savedMatch) {
-          matches.push({ ...savedMatch, therapist });
+
+        if (matchError) {
+          console.error('Error saving match:', matchError);
+          // Continue with other therapists even if one fails
+          matches.push({
+            therapist: therapist,
+            matchScore: matchResult.matchScore,
+            confidenceLevel: matchResult.confidenceLevel,
+            matchReasons: matchResult.matchReasons,
+            explanation: matchResult.explanation,
+            error: 'Failed to save to database'
+          });
+        } else if (savedMatch) {
+          matches.push({
+            ...savedMatch,
+            therapist: therapist
+          });
         }
+        
+      } catch (error) {
+        console.error(`Error processing therapist ${therapist.id}:`, error);
+        // Continue with next therapist even if one fails
       }
     }
 
-    // Sort matches by score
-    matches.sort((a, b) => b.match_score - a.match_score);
-
-    console.log(`Generated ${matches.length} matches`);
+    // Sort matches by score (highest first)
+    matches.sort((a: any, b: any) => (b.matchScore || 0) - (a.matchScore || 0));
+    
+    const topMatches = matches.slice(0, 5);
+    console.log(`Generated ${topMatches.length} top matches`);
 
     return new Response(JSON.stringify({
       success: true,
-      matches: matches.slice(0, 5) // Return top 5 matches
+      matches: topMatches,
+      totalTherapistsProcessed: therapistsToProcess.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -335,7 +357,8 @@ Consider personality compatibility, therapeutic approach alignment, specializati
   } catch (error) {
     console.error('Error in generate-matches function:', error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      success: false
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
