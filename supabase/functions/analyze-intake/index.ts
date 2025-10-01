@@ -13,12 +13,11 @@ serve(async (req) => {
   }
 
   try {
-    // Log the start of the function
     console.log('analyze-intake function started');
-    
+
     const { intakeData } = await req.json();
     console.log('Received intake data:', JSON.stringify(intakeData, null, 2));
-    
+
     if (!intakeData) {
       return new Response(JSON.stringify({ error: 'intakeData is required' }), {
         status: 400,
@@ -34,26 +33,28 @@ serve(async (req) => {
       });
     }
 
-    // Get environment variables with better error handling
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
-    console.log('Env check - Has OpenAI Key:', !!OPENAI_API_KEY);
-    console.log('Env check - Has Supabase URL:', !!SUPABASE_URL);
-    console.log('Env check - Has Supabase Anon Key:', !!SUPABASE_ANON_KEY);
+    console.log('Env check - OpenAI Key:', !!OPENAI_API_KEY);
+    console.log('Env check - Supabase URL:', !!SUPABASE_URL);
+    console.log('Env check - Supabase Anon Key:', !!SUPABASE_ANON_KEY);
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error('Missing Supabase environment variables');
     }
-    
+
     // Initialize Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
 
-    // Require authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // ✅ Fix: get user with token
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
+
     if (userError || !user) {
       console.error('Auth error:', userError);
       return new Response(JSON.stringify({ error: 'User not authenticated' }), {
@@ -61,45 +62,34 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    
+
     console.log('Analyzing intake data for user:', user.id);
 
-    // Enhanced heuristic analysis
+    // Heuristic fallback if OpenAI is unavailable
     const heuristicAnalysis = (input: any) => {
       console.log('Using heuristic analysis fallback');
-      
       const communication = String(input?.communicationStylePreference || '').toLowerCase();
       let communicationStyle = 'analytical';
-      
+
       if (communication.includes('gentle')) communicationStyle = 'empathetic';
       else if (communication.includes('collaborative')) communicationStyle = 'supportive';
       else if (communication.includes('challenging')) communicationStyle = 'direct';
 
-      const personalityProfile = {
-        communicationStyle,
-        approachPreference: 'solution-focused',
-        emotionalNeed: 'medium',
-        structurePreference: 'moderate'
-      };
-
-      let therapyFocus = [];
-      if (Array.isArray(input?.specificConcerns)) {
-        therapyFocus = input.specificConcerns.slice(0, 5);
-      } else if (input?.specificConcerns) {
-        therapyFocus = [input.specificConcerns];
-      }
-
-      const toneScores = {
-        directness: communicationStyle === 'direct' ? 0.7 : 0.4,
-        empathy: communicationStyle === 'empathetic' ? 0.8 : 0.5,
-        analyticalApproach: 0.6,
-        supportiveness: communicationStyle === 'supportive' ? 0.75 : 0.5
-      };
-
       return {
-        personalityProfile,
-        toneScores,
-        therapyFocus,
+        personalityProfile: {
+          communicationStyle,
+          approachPreference: 'solution-focused',
+          emotionalNeed: 'medium',
+          structurePreference: 'moderate'
+        },
+        toneScores: {
+          directness: communicationStyle === 'direct' ? 0.7 : 0.4,
+          empathy: communicationStyle === 'empathetic' ? 0.8 : 0.5,
+          analyticalApproach: 0.6,
+          supportiveness: communicationStyle === 'supportive' ? 0.75 : 0.5
+        },
+        therapyFocus: Array.isArray(input?.specificConcerns) ? input.specificConcerns.slice(0, 5)
+                      : input?.specificConcerns ? [input.specificConcerns] : [],
         personalityInsights: 'Heuristic-based analysis generated. Consider setting OPENAI_API_KEY for more accurate results.',
         matchingCriteria: 'Match based on communication style, therapy approach, and user preferences.'
       };
@@ -107,10 +97,9 @@ serve(async (req) => {
 
     let aiAnalysis;
 
-    // Only use OpenAI if API key is available
-    if (OPENAI_API_KEY && OPENAI_API_KEY !== '') {
+    if (OPENAI_API_KEY) {
       console.log('Attempting OpenAI analysis...');
-      
+
       const prompt = `
 Analyze this therapy intake information and provide a JSON assessment:
 
@@ -149,16 +138,13 @@ Provide JSON with this structure:
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gpt-3.5-turbo', // Using more available model
+            model: 'gpt-4o-mini', // ✅ upgrade (or use "gpt-3.5-turbo")
             messages: [
               {
                 role: 'system',
-                content: 'You are a clinical psychologist. Return ONLY valid JSON, no other text.'
+                content: 'You are a clinical psychologist. Return ONLY valid JSON, no extra text.'
               },
-              {
-                role: 'user',
-                content: prompt
-              }
+              { role: 'user', content: prompt }
             ],
             max_tokens: 1000,
             temperature: 0.3,
@@ -168,10 +154,9 @@ Provide JSON with this structure:
         if (openAIResponse.ok) {
           const openAIData = await openAIResponse.json();
           const analysisText = openAIData.choices[0]?.message?.content;
-          
+
           if (analysisText) {
             try {
-              // Clean the response and parse JSON
               const cleanJson = analysisText.replace(/```json\n?|\n?```/g, '').trim();
               aiAnalysis = JSON.parse(cleanJson);
               console.log('OpenAI analysis successful');
@@ -183,8 +168,7 @@ Provide JSON with this structure:
             throw new Error('Empty response from OpenAI');
           }
         } else {
-          const errorText = await openAIResponse.text();
-          console.error('OpenAI API error:', openAIResponse.status, errorText);
+          console.error('OpenAI API error:', openAIResponse.status, await openAIResponse.text());
           aiAnalysis = heuristicAnalysis(intakeData);
         }
       } catch (openAIError) {
@@ -196,14 +180,14 @@ Provide JSON with this structure:
       aiAnalysis = heuristicAnalysis(intakeData);
     }
 
-    // Prepare data for database with null checks
+    // Build intake record
     const intakeRecord: any = {
       user_id: user.id,
       current_situation: intakeData?.currentSituation || null,
       goals: intakeData?.goals || null,
-      specific_concerns: Array.isArray(intakeData?.specificConcerns) ? 
-        intakeData.specificConcerns : 
-        (intakeData?.specificConcerns ? [intakeData.specificConcerns] : []),
+      specific_concerns: Array.isArray(intakeData?.specificConcerns)
+        ? intakeData.specificConcerns
+        : intakeData?.specificConcerns ? [intakeData.specificConcerns] : [],
       urgency_level: intakeData?.urgencyLevel || null,
       budget_range: intakeData?.budgetRange || null,
       session_format_preference: intakeData?.sessionFormatPreference || null,
@@ -216,19 +200,22 @@ Provide JSON with this structure:
       ai_analysis: aiAnalysis || {}
     };
 
+    // ✅ Prune undefined keys
+    Object.keys(intakeRecord).forEach(key => {
+      if (intakeRecord[key] === undefined) delete intakeRecord[key];
+    });
+
     console.log('Inserting intake record...');
-    
     const { data: intakeResponse, error: insertError } = await supabase
       .from('intake_responses')
-      .insert(intakeRecord)
+      .insert([intakeRecord]) // ✅ fix
       .select()
       .single();
 
     if (insertError) {
       console.error('Database insertion error:', insertError);
-      // Check if it's a schema issue
       if (insertError.code === '42703') {
-        throw new Error(`Database column error: ${insertError.message}. Check if all columns exist in intake_responses table.`);
+        throw new Error(`Database column error: ${insertError.message}`);
       }
       throw new Error(`Failed to save intake: ${insertError.message}`);
     }
@@ -245,7 +232,7 @@ Provide JSON with this structure:
 
   } catch (error) {
     console.error('Error in analyze-intake function:', error);
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       success: false
     }), {
