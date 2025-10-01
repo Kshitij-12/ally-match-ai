@@ -15,6 +15,7 @@ serve(async (req) => {
   try {
     const { intakeData } = await req.json();
     const authHeader = req.headers.get('Authorization')!;
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
     
     // Initialize Supabase client
     const supabase = createClient(
@@ -23,16 +24,41 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-   // TEMPORARY: Skip auth for testing
-let user = { id: 'test-user-' + Date.now() };
-
-// Uncomment these lines when you have auth working:
-// const { data: { user } } = await supabase.auth.getUser();
-// if (!user) {
-//   throw new Error('User not authenticated');
-// }
+    // Require authenticated user (JWT forwarded from client)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'User not authenticated' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     console.log('Analyzing intake data for user:', user.id);
     
+    // Helper: heuristic analysis when OpenAI is unavailable or fails
+    const heuristicAnalysis = (input: any) => {
+      const communication = String(input.communicationStylePreference || '').toLowerCase();
+      const personalityProfile = {
+        communicationStyle: communication === 'gentle' ? 'empathetic' : communication === 'collaborative' ? 'supportive' : communication === 'challenging' ? 'direct' : 'analytical',
+        approachPreference: 'solution-focused',
+        emotionalNeed: 'medium',
+        structurePreference: 'moderate'
+      };
+      const therapyFocus = Array.isArray(input.specificConcerns) ? input.specificConcerns.slice(0, 5) : [];
+      const toneScores = {
+        directness: personalityProfile.communicationStyle === 'direct' ? 0.7 : 0.4,
+        empathy: personalityProfile.communicationStyle === 'empathetic' ? 0.8 : 0.5,
+        analyticalApproach: 0.6,
+        supportiveness: personalityProfile.communicationStyle === 'supportive' ? 0.75 : 0.5
+      };
+      return {
+        personalityProfile,
+        toneScores,
+        therapyFocus,
+        personalityInsights: 'Heuristic-based analysis generated due to AI unavailability. Results provide a reasonable starting point.',
+        matchingCriteria: 'Match on communication style preference, therapy approach overlap, language, budget, and experience.'
+      };
+    };
+
     // Prepare OpenAI prompt for personality analysis
     const prompt = `
 Analyze the following therapy intake information and provide a detailed personality and communication style assessment:
@@ -66,54 +92,55 @@ Based on this information, provide a JSON response with the following structure:
 
 Ensure all scores are between 0.0 and 1.0, with higher scores indicating stronger preference for that trait.`;
 
-    // Call OpenAI API
-    const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert clinical psychologist specializing in personality assessment and therapist matching. Provide accurate, professional analysis based on intake information.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 1500,
-        temperature: 0.3,
-      }),
-    });
-
-    if (!openAIResponse.ok) {
-      const errorText = await openAIResponse.text();
-      console.error('OpenAI API error:', errorText);
-      throw new Error(`OpenAI API error: ${openAIResponse.status}`);
-    }
-
-    const openAIData = await openAIResponse.json();
-    const analysisText = openAIData.choices[0].message.content;
-    
-    console.log('OpenAI analysis response:', analysisText);
-    
-    // Parse the JSON response from OpenAI
     let aiAnalysis;
-    try {
-      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        aiAnalysis = JSON.parse(jsonMatch[0]);
+    if (OPENAI_API_KEY) {
+      // Call OpenAI API
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert clinical psychologist specializing in personality assessment and therapist matching. Provide accurate, professional analysis based on intake information.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: 1500,
+          temperature: 0.3,
+        }),
+      });
+
+      if (!openAIResponse.ok) {
+        const errorText = await openAIResponse.text();
+        console.error('OpenAI API error:', errorText);
+        aiAnalysis = heuristicAnalysis(intakeData);
       } else {
-        // Try to parse the whole response as JSON (fallback)
-        aiAnalysis = JSON.parse(analysisText);
+        const openAIData = await openAIResponse.json();
+        const analysisText = openAIData.choices[0].message.content;
+        console.log('OpenAI analysis response:', analysisText);
+        try {
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            aiAnalysis = JSON.parse(jsonMatch[0]);
+          } else {
+            aiAnalysis = JSON.parse(analysisText);
+          }
+        } catch (parseError) {
+          console.error('Error parsing OpenAI response:', parseError, '\nRaw response:', analysisText);
+          aiAnalysis = heuristicAnalysis(intakeData);
+        }
       }
-    } catch (parseError) {
-      console.error('Error parsing OpenAI response:', parseError, '\nRaw response:', analysisText);
-      throw new Error('Failed to parse AI analysis. Please try again or contact support.');
+    } else {
+      // No API key configured; use heuristic
+      aiAnalysis = heuristicAnalysis(intakeData);
     }
 
     // Save intake response to database
