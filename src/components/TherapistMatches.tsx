@@ -57,6 +57,12 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
   const [selectedTherapist, setSelectedTherapist] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Debug: Log the actual API response to see the real field names
+  console.log("API Response - userData.matches:", userData.matches);
+  if (userData.matches && userData.matches.length > 0) {
+    console.log("First match structure:", userData.matches[0]);
+  }
+
   // Use real matches from AI analysis if available, otherwise fall back to mock data
   const therapistMatches = userData.matches || [
     {
@@ -87,64 +93,6 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
         structure: 0.78,
         warmth: 0.95
       }
-    },
-    {
-      id: "2", 
-      name: "Dr. Michael Rodriguez",
-      title: "Licensed Marriage & Family Therapist",
-      specialties: ["Relationships", "Life Transitions", "Humanistic Therapy"],
-      experience: 12,
-      rating: 4.8,
-      reviewCount: 203,
-      location: "Los Angeles, CA",
-      sessionTypes: ["Video", "Phone", "In-Person"],
-      fee: "$120-150",
-      availability: "Available next week",
-      photo: therapistsImage,
-      bio: "I work with individuals and couples to navigate life's challenges with courage and compassion. My goal is to help you discover your own inner wisdom and strength.",
-      approach: "Person-Centered Therapy with Gestalt techniques",
-      education: "MA in Marriage & Family Therapy, UCLA",
-      matchScore: 89,
-      matchReasons: [
-        "Gentle and supportive style matches your communication preferences",
-        "Experience with life transitions relevant to your background",
-        "Warm and empathetic approach aligns with your needs"
-      ],
-      personalityMatch: {
-        empathy: 0.88,
-        directness: 0.45,
-        structure: 0.60,
-        warmth: 0.92
-      }
-    },
-    {
-      id: "3",
-      name: "Dr. Emily Johnson",
-      title: "Licensed Clinical Social Worker",
-      specialties: ["Trauma", "EMDR", "Mindfulness", "Self-Esteem"],
-      experience: 15,
-      rating: 4.9,
-      reviewCount: 156,
-      location: "Seattle, WA", 
-      sessionTypes: ["Video", "In-Person"],
-      fee: "$140-170",
-      availability: "Available in 2 weeks",
-      photo: therapistsImage,
-      bio: "I specialize in helping people heal from trauma and develop a stronger sense of self. My approach is trauma-informed and emphasizes building resilience and post-traumatic growth.",
-      approach: "EMDR and Somatic Therapy",
-      education: "MSW Clinical Social Work, University of Washington",
-      matchScore: 86,
-      matchReasons: [
-        "Trauma-informed approach addresses your background experiences",
-        "Combines empathy with practical healing techniques",
-        "Strong track record with clients who have similar concerns"
-      ],
-      personalityMatch: {
-        empathy: 0.90,
-        directness: 0.72,
-        structure: 0.85,
-        warmth: 0.87
-      }
     }
   ];
 
@@ -162,6 +110,38 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
     });
   };
 
+  // Helper function to safely extract therapist data with fallbacks
+  const getTherapistData = (match: any) => {
+    // Try multiple possible field names from your API
+    const therapist = match.therapist || match.raw_therapist || match;
+    
+    return {
+      id: therapist.id || therapist.therapist_id || `temp-${Math.random()}`,
+      name: therapist.name || therapist.full_name || "Therapist",
+      title: therapist.title || therapist.credentials || "Licensed Therapist",
+      specialties: therapist.specialties || therapist.specializations || therapist.expertise || ["General practice"],
+      experience: therapist.experience || therapist.years_experience || 5,
+      rating: therapist.rating || therapist.avg_rating || 4.5,
+      reviewCount: therapist.reviewCount || therapist.review_count || therapist.num_reviews || 50,
+      location: therapist.location || therapist.city_state || "Available online",
+      sessionTypes: therapist.sessionTypes || therapist.session_types || ["Video"],
+      fee: therapist.fee || therapist.hourly_rate || therapist.session_fee || "$120-150",
+      availability: therapist.availability || "Available this week",
+      photo: therapist.photo || therapist.profile_picture || therapistsImage,
+      bio: therapist.bio || therapist.biography || "Experienced therapist committed to helping clients achieve their goals.",
+      approach: therapist.approach || therapist.approach_style || therapist.therapy_approach || "Various approaches",
+      education: therapist.education || therapist.credentials_detail || "Licensed professional",
+      matchScore: match.match_score || match.matchScore || match.score || 85,
+      matchReasons: match.match_reasons || therapist.matchReasons || ["Communication style match", "Language compatibility", "Within budget range"],
+      personalityMatch: therapist.personalityMatch || {
+        empathy: 0.8,
+        directness: 0.6,
+        structure: 0.7,
+        warmth: 0.8
+      }
+    };
+  };
+
   return (
     <div className="min-h-screen bg-background py-12">
       <div className="max-w-6xl mx-auto px-6">
@@ -175,7 +155,7 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold mb-4">Your Perfect Therapist Matches</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Based on your AI personality analysis, we've found therapists who align with your communication style and therapeutic needs.
+              Based on your AI personality analysis, we've found {therapistMatches.length} therapists who align with your communication style and therapeutic needs.
             </p>
           </div>
 
@@ -189,30 +169,30 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span>Empathy Need</span>
-                  <span>{Math.round(userData.aiAnalysis.personalityScore.empathy * 100)}%</span>
+                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.empathy || 0.7) * 100)}%</span>
                 </div>
-                <Progress value={userData.aiAnalysis.personalityScore.empathy * 100} className="h-2" />
+                <Progress value={(userData.aiAnalysis?.personalityScore?.empathy || 0.7) * 100} className="h-2" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span>Direct Communication</span>
-                  <span>{Math.round(userData.aiAnalysis.personalityScore.directness * 100)}%</span>
+                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.directness || 0.6) * 100)}%</span>
                 </div>
-                <Progress value={userData.aiAnalysis.personalityScore.directness * 100} className="h-2" />
+                <Progress value={(userData.aiAnalysis?.personalityScore?.directness || 0.6) * 100} className="h-2" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span>Structure Preference</span>
-                  <span>{Math.round(userData.aiAnalysis.personalityScore.structure * 100)}%</span>
+                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.structure || 0.5) * 100)}%</span>
                 </div>
-                <Progress value={userData.aiAnalysis.personalityScore.structure * 100} className="h-2" />
+                <Progress value={(userData.aiAnalysis?.personalityScore?.structure || 0.5) * 100} className="h-2" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span>Warmth Need</span>
-                  <span>{Math.round(userData.aiAnalysis.personalityScore.warmth * 100)}%</span>
+                  <span>{Math.round((userData.aiAnalysis?.personalityScore?.warmth || 0.8) * 100)}%</span>
                 </div>
-                <Progress value={userData.aiAnalysis.personalityScore.warmth * 100} className="h-2" />
+                <Progress value={(userData.aiAnalysis?.personalityScore?.warmth || 0.8) * 100} className="h-2" />
               </div>
             </div>
           </Card>
@@ -220,9 +200,10 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
 
         {/* Therapist Matches */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {therapistMatches.map((match) => {
-            const therapist = match.therapist || match;
-            const matchScore = match.match_score ? Math.round(match.match_score * 100) : match.matchScore;
+          {therapistMatches.map((match, index) => {
+            const therapist = getTherapistData(match);
+            const matchScore = therapist.matchScore;
+
             return (
             <Card key={therapist.id} className="p-6 card-gradient border-0 shadow-medium hover:shadow-strong transition-smooth">
               {/* Match Score Badge */}
@@ -251,7 +232,7 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                   <p className="text-sm text-muted-foreground">{therapist.title}</p>
                   <div className="flex items-center mt-1">
                     <Star className="w-4 h-4 text-yellow-500 mr-1" />
-                    <span className="text-sm">{therapist.rating || 4.8} ({therapist.reviewCount || 50} reviews)</span>
+                    <span className="text-sm">{therapist.rating} ({therapist.reviewCount} reviews)</span>
                   </div>
                 </div>
               </div>
@@ -259,14 +240,14 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
               {/* Specialties */}
               <div className="mb-4">
                 <div className="flex flex-wrap gap-2">
-                  {(therapist.specializations || therapist.specialties || []).slice(0, 3).map((specialty) => (
+                  {therapist.specialties.slice(0, 3).map((specialty: string) => (
                     <Badge key={specialty} variant="secondary" className="text-xs">
                       {specialty}
                     </Badge>
                   ))}
-                  {(therapist.specializations || therapist.specialties || []).length > 3 && (
+                  {therapist.specialties.length > 3 && (
                     <Badge variant="secondary" className="text-xs">
-                      +{(therapist.specializations || therapist.specialties || []).length - 3} more
+                      +{therapist.specialties.length - 3} more
                     </Badge>
                   )}
                 </div>
@@ -276,37 +257,37 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
               <div className="space-y-2 text-sm mb-4">
                 <div className="flex items-center">
                   <Award className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.years_experience || therapist.experience} years experience</span>
+                  <span>{therapist.experience} years experience</span>
                 </div>
                 <div className="flex items-center">
                   <MapPin className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.location || 'Available online'}</span>
+                  <span>{therapist.location}</span>
                 </div>
                 <div className="flex items-center">
                   <DollarSign className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>${therapist.hourly_rate || therapist.fee} per session</span>
+                  <span>{therapist.fee} per session</span>
                 </div>
                 <div className="flex items-center">
                   <Clock className="w-4 h-4 text-muted-foreground mr-2" />
-                  <span>{therapist.availability || 'Available this week'}</span>
+                  <span>{therapist.availability}</span>
                 </div>
               </div>
 
               {/* Session Types */}
               <div className="flex gap-2 mb-4">
-                {(therapist.online_sessions || (therapist.sessionTypes && therapist.sessionTypes.includes("Video"))) && (
+                {therapist.sessionTypes.includes("Video") && (
                   <Badge variant="outline" className="text-xs">
                     <Video className="w-3 h-3 mr-1" />
                     Video
                   </Badge>
                 )}
-                {(therapist.sessionTypes && therapist.sessionTypes.includes("Phone")) && (
+                {therapist.sessionTypes.includes("Phone") && (
                   <Badge variant="outline" className="text-xs">
                     <Phone className="w-3 h-3 mr-1" />
                     Phone
                   </Badge>
                 )}
-                {(therapist.in_person_sessions || (therapist.sessionTypes && therapist.sessionTypes.includes("In-Person"))) && (
+                {therapist.sessionTypes.includes("In-Person") && (
                   <Badge variant="outline" className="text-xs">
                     <MessageCircle className="w-3 h-3 mr-1" />
                     In-Person
@@ -321,18 +302,13 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                   Why This Match?
                 </h4>
                 <ul className="text-xs text-muted-foreground space-y-1">
-                  {(match.match_reasons || therapist.matchReasons || []).slice(0, 2).map((reason, index) => (
+                  {therapist.matchReasons.slice(0, 2).map((reason: string, index: number) => (
                     <li key={index} className="flex items-start">
                       <span className="w-1 h-1 bg-primary rounded-full mt-2 mr-2 flex-shrink-0" />
                       {reason}
                     </li>
                   ))}
                 </ul>
-                {match.ai_explanation && (
-                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    "{match.ai_explanation}"
-                  </p>
-                )}
               </div>
 
               {/* Personality Match Bars */}
@@ -345,12 +321,6 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                       <span>{matchScore}%</span>
                     </div>
                     <Progress value={matchScore} className="h-1" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>Confidence</span>
-                      <span className="capitalize">{match.confidence_level || 'High'}</span>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -381,15 +351,15 @@ export const TherapistMatches = ({ userData, onBack }: TherapistMatchesProps) =>
                 <div className="mt-4 pt-4 border-t space-y-3 animate-fade-in">
                   <div>
                     <h5 className="font-medium text-sm mb-1">About</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.bio || 'Experienced therapist committed to helping clients achieve their goals.'}</p>
+                    <p className="text-xs text-muted-foreground">{therapist.bio}</p>
                   </div>
                   <div>
                     <h5 className="font-medium text-sm mb-1">Approach</h5>
-                    <p className="text-xs text-muted-foreground">{therapist.approach_style || therapist.approach || 'Client-centered approach with evidence-based techniques'}</p>
+                    <p className="text-xs text-muted-foreground">{therapist.approach}</p>
                   </div>
                   <div>
                     <h5 className="font-medium text-sm mb-1">Specializations</h5>
-                    <p className="text-xs text-muted-foreground">{(therapist.specializations || therapist.specialties || []).join(', ')}</p>
+                    <p className="text-xs text-muted-foreground">{therapist.specialties.join(', ')}</p>
                   </div>
                 </div>
               )}
